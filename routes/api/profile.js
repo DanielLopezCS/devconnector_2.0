@@ -9,6 +9,22 @@ const Profile = require('../../models/Profile');
 const User = require('../../models/User');
 const Post = require('../../models/Post');
 
+// redisDemo.js
+const redis = require('redis');
+const client = redis.createClient(); // this creates a new client
+const util = require('util');
+
+client.get = util.promisify(client.get);
+
+client.on('connect', function() {
+  console.log('Redis client connected');
+});
+
+client.on('error', function (err) {
+  console.log('Something went wrong ' + err);
+});
+
+
 // @route    GET api/profile/me
 // @desc     Get current users profile
 // @access   Private
@@ -121,13 +137,25 @@ router.get('/', async (req, res) => {
 // @access   Public
 router.get('/user/:user_id', async (req, res) => {
   try {
+
+
+    const cachedProfile = await client.get(req.params.user_id);
+    if(cachedProfile){
+      console.log("FROM REDIS");
+      console.log(JSON.stringify(cachedProfile));
+      return res.send(JSON.parse(cachedProfile));
+    }
+
+    console.log("FROM MONGO");
     const profile = await Profile.findOne({
       user: req.params.user_id
     }).populate('user', ['name', 'avatar']);
-
+   
     if (!profile) return res.status(400).json({ msg: 'Profile not found' });
+    client.set(req.params.user_id, JSON.stringify(profile));
 
-    res.json(profile);
+    res.send(profile);
+   
   } catch (err) {
     console.error(err.message);
     if (err.kind == 'ObjectId') {
